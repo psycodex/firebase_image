@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class FirebaseImage extends ImageProvider<FirebaseImage> {
-  // Default: True. Specified whether or not an image should be cached (optional)
+  // Default: True. Specifies whether or not an image should be cached (optional)
   final bool shouldCache;
 
   /// Default: 1.0. The scale to display the image at (optional)
@@ -28,10 +28,10 @@ class FirebaseImage extends ImageProvider<FirebaseImage> {
   /// The model for the image object
   final FirebaseImageObject _imageObject;
 
-  /// Fetches, saves and returns an ImageProvider for any image in a readable Firebase Cloud Storeage bucket.
+  /// Fetches, saves, and returns an ImageProvider for any image in a readable Firebase Cloud Storage bucket.
   ///
   /// [location] The URI of the image, in the bucket, to be displayed
-  /// [shouldCache] Default: True. Specified whether or not an image should be cached (optional)
+  /// [shouldCache] Default: True. Specifies whether or not an image should be cached (optional)
   /// [scale] Default: 1.0. The scale to display the image at (optional)
   /// [maxSizeBytes] Default: 2.5MB. The maximum size in bytes to be allocated in the device's memory for the image (optional)
   /// [cacheRefreshStrategy] Default: BY_METADATA_DATE. Specifies the strategy in which to check if the cached version should be refreshed (optional)
@@ -57,7 +57,7 @@ class FirebaseImage extends ImageProvider<FirebaseImage> {
   /// Pre-caches an image
   Future<void> preCache() async {
     if (shouldCache == false) {
-      throw "Caching must be enabled to pre-cache an image.";
+      throw Exception("Caching must be enabled to pre-cache an image.");
     }
     await _fetchImage();
   }
@@ -105,20 +105,22 @@ class FirebaseImage extends ImageProvider<FirebaseImage> {
   }
 
   Future<Codec> _fetchImageCodec() async {
-    return await PaintingBinding.instance!
-        .instantiateImageCodec(await _fetchImage());
+    return await instantiateImageCodec(await _fetchImage());
   }
 
   @override
-  Future<FirebaseImage> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<FirebaseImage>(this);
-  }
-
-  @override
-  ImageStreamCompleter load(FirebaseImage key, DecoderCallback decode) {
+  ImageStreamCompleter loadImage(
+      FirebaseImage key, ImageDecoderCallback decode) {
     return MultiFrameImageStreamCompleter(
       codec: key._fetchImageCodec(),
       scale: key.scale,
+      informationCollector: () sync* {
+        yield DiagnosticsProperty<ImageProvider>(
+          'Image provider',
+          key,
+          style: DiagnosticsTreeStyle.errorProperty,
+        );
+      },
     );
   }
 
@@ -131,8 +133,13 @@ class FirebaseImage extends ImageProvider<FirebaseImage> {
   }
 
   @override
-  int get hashCode => hashValues(_imageObject.uri, scale);
+  int get hashCode => Object.hash(_imageObject.uri, scale);
 
   @override
   String toString() => '$runtimeType("${_imageObject.uri}", scale: $scale)';
+
+  @override
+  Future<FirebaseImage> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<FirebaseImage>(this);
+  }
 }
